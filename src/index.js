@@ -1,4 +1,3 @@
-(function(){
 	
 	'use strict';
 
@@ -578,5 +577,3 @@
 
 		return publicApis;
 	}
-	
-})();
