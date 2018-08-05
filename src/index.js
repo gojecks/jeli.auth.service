@@ -57,9 +57,30 @@
 	        return regExp.test(val);
 	    };
 
-	    //validate Domain Address
+	    // ^	The password string will start this way
+	    // (?=.*[a-z])	The string must contain at least 1 lowercase alphabetical character
+	    // (?=.*[A-Z])	The string must contain at least 1 uppercase alphabetical character
+	    // (?=.*[0-9])	The string must contain at least 1 numeric character
+	    // (?=.[!@#\$%\^&])	The string must contain at least one special character, but we are escaping reserved RegEx characters to avoid conflict
+	    // (?=.{8,})	The string must be eight characters or longer
 	    validationConfigurationStack.domainvalidation = function(domain) {
 	        return /[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+/.test(domain);
+	    };
+
+	    /**
+	     * @name mediumPasswordStrength
+	     * @param {*} passwd 
+	     */
+	    validationConfigurationStack.mediumpasswordstrength = function(passwd) {
+	        return new RegExp("^(((?=.*[a-z])(?=.*[A-Z]))|((?=.*[a-z])(?=.*[0-9]))|((?=.*[A-Z])(?=.*[0-9])))(?=.{6,})").test(passwd);
+	    };
+
+	    /**
+	     * @name strongPasswordStrength
+	     * @param {*} passwd 
+	     */
+	    validationConfigurationStack.strongpasswordstrength = function(passwd) {
+	        return new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&\*])(?=.{8,})").test(passwd)
 	    };
 
 	    // boolean validation
@@ -81,7 +102,7 @@
 	            return false;
 	        }
 
-	        return def.resolve();
+	        return def.resolve(val);
 	    };
 
 	    this.setLoginType = function(type) {
@@ -127,13 +148,13 @@
 
 
 	    /*
-	    	@MMethodName : setValidationConfiguration
+	    	@MMethodName : setValidationRule
 	    	@Params : Configuration Name (STRING)
 	    	@Params : Configuration Function (OBJECT)
 	    	@return : Context (this)
 	    */
 
-	    this.setValidationConfiguration = function(name, stack) {
+	    this.setValidationRule = function(name, stack) {
 	        if (name && stack) {
 	            validationConfigurationStack[name] = stack;
 	        }
@@ -288,7 +309,7 @@
 	    var _current = {};
 	    privateApis.validate = function(type, requiredFields) {
 	        if (!Object.keys(privateApis[type].postBody).length) {
-	            this[type].requiresValidation = true;
+	            this[type].emptyPostBody = true;
 	            return;
 	        }
 
@@ -309,13 +330,9 @@
 
 	        //set the validation flag to false
 	        privateApis[type].validationFailed = false;
-	        var requiredBody = Object.keys(privateApis[type].postBody);
-	        _current.pending.count = requiredBody.length - 1;
-	        requiredBody.forEach(function(name) {
-	            var _failedValidation = [];
-	            if (requiredFields[name]) {
-	                validate(privateApis[type].postBody[name], requiredFields[name], name);
-	            }
+	        _current.pending.count = validationModel.length;
+	        validationModel.forEach(function(name) {
+	            validate(privateApis[type].postBody[name], requiredFields[name], name);
 	        });
 	    };
 
@@ -352,9 +369,9 @@
 	            /**
 	             * check if passed && passed is a promise
 	             */
-	            if (jEli.$isObject(passed) && passed.hasOwnProperty('then')) {
+	            if (jEli.$isObject(passed) && jEli.$isEqual('$ajax', name)) {
 	                _current.hasAjax = true;
-	                passed.then(promiseSuccessHandler(obj, name, par, 'onsuccess', true), promiseSuccessHandler(obj, name, par, 'onerror', false));
+	                passed.then(promiseHandler(obj.onsuccess, name, par, true), promiseHandler(obj.onerror, name, par, false));
 	                return;
 	            }
 
@@ -367,12 +384,11 @@
 	     * @param {*} def 
 	     * @param {*} name 
 	     * @param {*} par 
-	     * @param {*} type 
 	     * @param {*} ret 
 	     */
-	    function promiseSuccessHandler(def, name, par, type, ret) {
+	    function promiseHandler(cb, name, par, ret) {
 	        return function(res) {
-	            _current.rem((def[type] || function() { return ret; })(res), par, name);
+	            _current.rem((cb || function() { return ret; })(res), par, name);
 	        }
 	    }
 
@@ -444,7 +460,6 @@
 	            this.validateFields = function() {
 	                privateApis[type].requiresValidation = false;
 	                privateApis[type].failedValidation = {};
-
 	                //iterate through the postBody data
 	                //Make sure it passes validation
 	                privateApis.validate(type, requiredFields);
@@ -602,6 +617,11 @@
 	                return;
 	            }
 
+	            if (privateApis.default.emptyPostBody) {
+	                error({ reason: "All form field is empty", code: -100 });
+	                return;
+	            }
+
 	            /**
 	             * only return when there is a pending validation
 	             */
@@ -663,7 +683,8 @@
 	            },
 	            storeData: function(name, value) {
 	                _userAuthenticationData[name] = value;
-	            }
+	            },
+	            onBeforeUnload: onBeforeUnload
 	        };
 
 	        //set a new stack
@@ -694,6 +715,40 @@
 	        }
 	    };
 
+	    /**
+	     * 
+	     */
+
+	    function onBeforeUnload() {
+	        if (jEli.dom.support.localStorage && jAuthProvider.authManagerSettings.storage) {
+	            for (var stack in _stack) {
+	                //store the ref data to be retrieve
+	                window[jAuthProvider.authManagerSettings.storageType].setItem(stack, JSON.stringify(_stack[stack]()));
+	            }
+	        }
+	    }
+
+	    /**
+	     * 
+	     * @param {*} name 
+	     * @param {*} fn 
+	     */
+	    onBeforeUnload.addToStack = function(name, fn) {
+	        if (_stack && !_stack.hasOwnProperty(name) && jEli.$isFunction(fn)) {
+	            _stack[name] = fn;
+	        }
+	    };
+
+	    /**
+	     * 
+	     * @param {*} stackName 
+	     */
+	    onBeforeUnload.removeFromStack = function(stackName) {
+	        if (_stack.hasOwnProperty(stackName)) {
+	            delete _stack[stackName];
+	        }
+	    };
+
 	    /*
 	    	Service Watcher
 	    */
@@ -701,14 +756,7 @@
 	        if ("onbeforeunload" in window) {
 	            jEli
 	                .dom(window)
-	                .bind('beforeunload', function(e) {
-	                    if (jEli.dom.support.localStorage) {
-	                        for (var stack in _stack) {
-	                            //store the ref data to be retrieve
-	                            window[jAuthProvider.authManagerSettings.storageType].setItem(stack, JSON.stringify(_stack[stack]()));
-	                        }
-	                    }
-	                });
+	                .bind('beforeunload', onBeforeUnload);
 	        }
 	    }
 
