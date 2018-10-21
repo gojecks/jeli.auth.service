@@ -104,6 +104,15 @@
 	        return def.resolve(val);
 	    };
 
+	    /**
+	     * 
+	     * @param {*} val 
+	     * @param {*} def 
+	     */
+	    validationConfigurationStack.isempty = function(val, def) {
+	        return def === jEli.$isEmpty(val);
+	    };
+
 	    this.setLoginType = function(type) {
 	        if (type && config[type] && !loginType) {
 	            config[type] = true;
