@@ -1,14 +1,13 @@
 	'use strict';
 
-	//jEli Login Service
-	//Powered by jEli
+	//jeli Login Service
+	//Powered by jeli
 
 	//Update Service
 	//Version 1.2.0 Wed 26.10.16
 
-	jEli
-	    .jModule('jeli.auth.service', {})
-	    .jProvider('jAuthProvider', jAuthProviderFN);
+	var module = jeli('jeli.auth.service', {})
+	    .provider('jAuthProvider', jAuthProviderFN);
 
 	function jAuthProviderFN() {
 	    //Config Object contains service that we support
@@ -34,7 +33,7 @@
 
 	    //validate length of a string or obj
 	    validationConfigurationStack['minlength'] = function(value, requiredLength) {
-	        if (jEli.$isObject(value) || !value) {
+	        if (jeli.$isObject(value) || !value) {
 	            return false;
 	        }
 
@@ -42,7 +41,7 @@
 	    };
 
 	    validationConfigurationStack['maxlength'] = function(value, requiredLength) {
-	        if (jEli.$isObject(value) || !value) {
+	        if (jeli.$isObject(value) || !value) {
 	            return false;
 	        }
 
@@ -97,7 +96,7 @@
 	     * 	}
 	     */
 	    validationConfigurationStack.$ajax = function(val, def) {
-	        if (!jEli.$isObject(def) || !jEli.$isFunction(def.resolve)) {
+	        if (!jeli.$isObject(def) || !jeli.$isFunction(def.resolve)) {
 	            return false;
 	        }
 
@@ -110,7 +109,7 @@
 	     * @param {*} def 
 	     */
 	    validationConfigurationStack.isempty = function(val, def) {
-	        return def === jEli.$isEmpty(val);
+	        return def === jeli.$isEmpty(val);
 	    };
 
 	    this.setLoginType = function(type) {
@@ -126,12 +125,12 @@
 	    // OAUTH SAMPLE
 	    //{url : "/oauth/token","client_id":"example","client_secret":"example_secret"}
 	    //jDB SAMPLE
-	    //{DBNAME:"jFrontEndOnly",resource : {loginMode:1,serviceHost:"http://localhost/jEliDB/","app_id" : "*","app_secret":"*"}}
+	    //{DBNAME:"jFrontEndOnly",resource : {loginMode:1,serviceHost:"http://localhost/jeliDB/","app_id" : "*","app_secret":"*"}}
 	    //CustomLogin
 	    //{"url":"/path_to_login_api"}
 
 	    this.loginServiceConfiguration = function(obj) {
-	        if (!jEli.$isObject(obj)) {
+	        if (!jeli.$isObject(obj)) {
 	            throw new error('Configuration is expected to be OBJECT not (' + typeof obj + ')');
 	        }
 
@@ -139,11 +138,11 @@
 	    };
 
 	    //jDB SAMPLE
-	    //{DBNAME:"jFrontEndOnly",resource : {serviceHost:"http://localhost/jEliDB/","app_id" : "*","app_secret":"*"}}
+	    //{DBNAME:"jFrontEndOnly",resource : {serviceHost:"http://localhost/jeliDB/","app_id" : "*","app_secret":"*"}}
 	    //CustomRegistration
 	    //{url:"/path_to_login_api"}
 	    this.registerServiceConfiguration = function(obj) {
-	        if (!jEli.$isObject(obj)) {
+	        if (!jeli.$isObject(obj)) {
 	            throw new error('Configuration is expected to be OBJECT not (' + typeof obj + ')');
 	        }
 
@@ -170,47 +169,37 @@
 	        return this;
 	    };
 
-	    var authManagerSettings = {
+	    this.authManagerSettings = {
 	        use: false,
 	        storage: false, //only set to true if you want manager to always handle your data on refresh
 	        storageType: "sessionStorage" //supports only local and sessionStorage
 	    };
 
-	    this.useAuthenticationManager = authManagerSettings;
+	    this.getLoginConfiguration = function() {
+	        return loginServiceConfiguration;
+	    };
 
-	    this.$get = function() {
-	        var publicApis = {
-	            authManagerSettings: authManagerSettings
-	        };
+	    this.getRegisterConfiguration = function() {
+	        return registerServiceConfiguration;
+	    };
 
-	        publicApis.getLoginConfiguration = function() {
-	            return loginServiceConfiguration;
-	        };
+	    this.getLoginType = function() {
+	        return loginType;
+	    };
 
-	        publicApis.getRegisterConfiguration = function() {
-	            return registerServiceConfiguration;
-	        };
+	    this.getLoginAttempt = function(force) {
+	        var _stackLoginTrial = window[this.authManagerSettings.storageType].loginAccountTrial;
+	        if (_stackLoginTrial && !force) {
+	            //delete the variable from the storage
+	            delete window[this.authManagerSettings.storageType].loginAccountTrial;
+	            return JSON.parse(_stackLoginTrial);
+	        }
 
-	        publicApis.getLoginType = function() {
-	            return loginType;
-	        };
+	        return loginTrailSettings;
+	    };
 
-	        publicApis.getLoginAttempt = function(force) {
-	            var _stackLoginTrial = window[authManagerSettings.storageType].loginAccountTrial;
-	            if (_stackLoginTrial && !force) {
-	                //delete the variable from the storage
-	                delete window[authManagerSettings.storageType].loginAccountTrial;
-	                return JSON.parse(_stackLoginTrial);
-	            }
-
-	            return loginTrailSettings;
-	        };
-
-	        //get validationConfigurationStack
-	        publicApis.getValidationConfiguration = function() {
-	            return validationConfigurationStack;
-	        };
-
-	        return publicApis;
+	    //get validationConfigurationStack
+	    this.getValidationConfiguration = function() {
+	        return validationConfigurationStack;
 	    };
 	}

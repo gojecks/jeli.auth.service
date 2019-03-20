@@ -1,18 +1,16 @@
 'use strict';
 
-//jEli Login Service
-//Powered by jEli
+//jeli Login Service
+//Powered by jeli
 
 //Update Service
 //Version 1.2.0 Wed 26.10.16
 
-jEli
-    .jModule('jeli.auth.service', {})
-    .jFactory('jAuthService', ["$http", "Base64", "jAuthProvider", "$defer", jAuthServiceFn]);
+module
+    .service('jAuthService', ["$http", "jAuthProvider", jAuthServiceFn]);
 
 //jAuthServiceFn
-function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
-
+function jAuthServiceFn($http, jAuthProvider) {
     var publicApis = {},
         privateApis = { register: {}, login: {}, authManager: {}, default: {} },
         validationFn = jAuthProvider.getValidationConfiguration(),
@@ -21,7 +19,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
 
     //register JDB
     privateApis.register.jDB = function(postObj, done, fail) {
-        new jEli.jdb(postObj.DBNAME, postObj.version || 1)
+        new jdb(postObj.DBNAME, postObj.version || 1)
             .isClientMode()
             .requiresLogin()
             .open(postObj.resource)
@@ -67,7 +65,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
             headers = this.getHeader(),
             data = 'username=' + encodeURIComponent(credentials.username) + '&password=' +
             encodeURIComponent(credentials.password) + '&grant_type=password&scope=read%20write';
-        headers['Authorization'] = 'Basic ' + Base64.encode(postObj.client_id + ':' + postObj.client_secret);
+        headers['Authorization'] = 'Basic ' + btoa(postObj.client_id + ':' + postObj.client_secret);
 
         //perform task
         $http.post(postObj.url, data, headers)
@@ -85,7 +83,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
 
     privateApis.login.jdb = function(postObj, done, fail) {
         var credentials = privateApis.login.postBody;
-        new jEli.jdb(postObj.DBNAME, postObj.version || 1)
+        new jdb(postObj.DBNAME, postObj.version || 1)
             .isClientMode()
             .requiresLogin()
             .open(postObj.resource)
@@ -108,7 +106,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
 
     //Private Api for form validation
     //Iterate through the required validation	
-    var _current = {};
+    var _current = new CurrentInstance(null, pushErrorMessage);
     privateApis.validate = function(type, requiredFields) {
         if (!Object.keys(privateApis[type].postBody).length) {
             this[type].emptyPostBody = true;
@@ -119,7 +117,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
         var validationModel = Object.keys(requiredFields),
             err = 0;
 
-        validationModel.filter(function(key) {
+        validationModel.forEach(function(key) {
             if (!privateApis[type].postBody.hasOwnProperty(key)) {
                 err++;
                 pushErrorMessage(key, type, "Field is required");
@@ -164,34 +162,19 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
                 passed = (validationFn[name.toLowerCase()] || function() {})(value, obj);
             }
             //if is custom function
-            else if (jEli.$isFunction(obj)) {
+            else if (jeli.$isFunction(obj)) {
                 passed = obj(value);
-            } else {}
+            }
 
             /**
              * check if passed && passed is a promise
              */
-            if (jEli.$isObject(passed) && jEli.$isEqual('$ajax', name)) {
-                _current.hasAjax = true;
-                passed.then(promiseHandler(obj.onsuccess, name, par, true), promiseHandler(obj.onerror, name, par, false));
-                return;
+            if (jeli.$isObject(passed) && jeli.$isEqual('$ajax', name)) {
+                return _current.registerAjax(passed, obj, par, name);
             }
 
             _current.rem(passed, par, name);
         });
-    }
-
-    /**
-     * 
-     * @param {*} def 
-     * @param {*} name 
-     * @param {*} par 
-     * @param {*} ret 
-     */
-    function promiseHandler(cb, name, par, ret) {
-        return function(res) {
-            _current.rem((cb || function() { return ret; })(res), par, name);
-        }
     }
 
     /*
@@ -202,55 +185,17 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
     */
 
     function setValidationObject(type, requiredFields) {
-        if (!requiredFields && !jEli.$isObject(requiredFields)) {
+        if (!requiredFields && !jeli.$isObject(requiredFields)) {
             throw new error('Configuration is expected to be Object not (' + typeof requiredFields + ')');
         }
 
         /**
          * hold the current running process instance
          */
-        _current = {
-            type: type,
-            pending: {
-                count: 0,
-                fields: {},
+        _current.clean();
+        _current.type = type;
 
-            },
-            hasAjax: false,
-            add: function(field, len) {
-                this.pending.fields[field] = {
-                    count: len,
-                    types: []
-                };
-            },
-            rem: function(passed, field, type) {
-                this.pending.fields[field].count--;
-                if (!passed) {
-                    // remove the object from Dict
-                    this.pending.fields[field].types.push(type);
-                }
-
-                /**
-                 * finished resolving but have some errors
-                 * push to the error domain
-                 */
-                if (!this.pending.fields[field].count) {
-                    if (this.pending.fields[field].types.length) {
-                        pushErrorMessage(field, this.type, this.pending.fields[field].types);
-                    }
-                    this.pending.count--;
-                }
-
-                if (!this.pending.count && this.hasAjax) {
-                    /**
-                     * trigger when no pending status
-                     */
-                    this.resolve();
-                }
-            }
-        };
-
-        if (privateApis[type] && jEli.$isObject(requiredFields)) {
+        if (privateApis[type] && jeli.$isObject(requiredFields)) {
             //set the validation flag
             privateApis[type].requiresValidation = true;
 
@@ -272,6 +217,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
 
         return this;
     }
+
 
     /**
      * setData Api
@@ -345,7 +291,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
 
     //PublicApi to add validation
     publicApis.addValidationRule = function(name, fn) {
-        if (name && jEli.$isFunction(fn)) {
+        if (name && jeli.$isFunction(fn)) {
             validationFn[name] = fn;
         }
 
@@ -486,6 +432,9 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
             storeData: function(name, value) {
                 _userAuthenticationData[name] = value;
             },
+            removeData: function(name) {
+                delete _userAuthenticationData[name];
+            },
             onBeforeUnload: onBeforeUnload
         };
 
@@ -522,7 +471,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
      */
 
     function onBeforeUnload() {
-        if (jEli.dom.support.localStorage && jAuthProvider.authManagerSettings.storage) {
+        if (jAuthProvider.authManagerSettings.storage && !!window[jAuthProvider.authManagerSettings.storage]) {
             for (var stack in _stack) {
                 //store the ref data to be retrieve
                 window[jAuthProvider.authManagerSettings.storageType].setItem(stack, JSON.stringify(_stack[stack]()));
@@ -536,7 +485,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
      * @param {*} fn 
      */
     onBeforeUnload.addToStack = function(name, fn) {
-        if (_stack && !_stack.hasOwnProperty(name) && jEli.$isFunction(fn)) {
+        if (_stack && !_stack.hasOwnProperty(name) && jeli.$isFunction(fn)) {
             _stack[name] = fn;
         }
     };
@@ -556,9 +505,7 @@ function jAuthServiceFn($http, Base64, jAuthProvider, $defer) {
     */
     function initializeWatcher() {
         if ("onbeforeunload" in window) {
-            jEli
-                .dom(window)
-                .bind('beforeunload', onBeforeUnload);
+            window.addEventListener('beforeunload', onBeforeUnload);
         }
     }
 
